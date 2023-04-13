@@ -1,1 +1,1 @@
-# everything about coding base on geth
+# everything about coding based on geth
