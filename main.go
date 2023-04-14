@@ -19,6 +19,9 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind/backends"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -303,7 +306,7 @@ func callRetrieve() {
 	}
 	fmt.Println("cl is created")
 
-	store, err := NewStorage(common.HexToAddress("0xF7F23920469fe375F812B098Cb3973b59A085C7d"), cl)
+	store, err := NewStorage(common.HexToAddress("0x648e64e7a2c42b21b8ed2e1fb4e2b0473633d588"), cl)
 	if err != nil {
 		log.Fatalf("Failed to instantiate Storage contract: %v", err)
 	}
@@ -314,11 +317,81 @@ func callRetrieve() {
 	fmt.Println("Value: ", value)
 }
 
+func sendTransaction() {
+	const key = `{"address":"97dfe2541fd011b67fde4eb6956977f18b2a44c9","crypto":{"cipher":"aes-128-ctr","ciphertext":"1319f26457d2e614117b30c0b010b569a89c2b955af766b7d439502ccab01699","cipherparams":{"iv":"3dfde7bb7163a6d60516010287afc40b"},"kdf":"scrypt","kdfparams":{"dklen":32,"n":4096,"p":6,"r":8,"salt":"53b2b24e524710e53d6f49ff6129985bc6a5dc41d4358851c51f5caa39296f41"},"mac":"664153009dc9497a00fd0c61591a303c3fb748fa515a7a6c3dd9c7640648246a"},"id":"afe89208-ab0c-4095-8771-669a427294d7","version":3}`
+	cl, err := ethclient.Dial("http://127.0.0.1:8545")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("cl is created")
+
+	store, err := NewStorage(common.HexToAddress("0x648e64e7a2c42b21b8ed2e1fb4e2b0473633d588"), cl)
+	if err != nil {
+		log.Fatalf("Failed to instantiate a Storage contract: %v", err)
+	}
+	// Create an authorized transactor and call the store function
+	chainId, err := cl.ChainID(context.Background())
+	if err != nil {
+		panic(err)
+	}
+	auth, err := bind.NewTransactorWithChainID(strings.NewReader(key), "2JYhuVMW6pW9dQJvugNY6d6YkHkqp3pY", chainId)
+	if err != nil {
+		log.Fatalf("Failed to create authorized transactor: %v", err)
+	}
+	// Call the store() function
+	tx, err := store.Set(auth, big.NewInt(420))
+	if err != nil {
+		log.Fatalf("Failed to update value: %v", err)
+	}
+	fmt.Printf("Update pending: 0x%x\n", tx.Hash())
+}
+
+func mockTest() {
+	key, _ := crypto.GenerateKey()
+	// Create an authorized transactor and call the store function
+	auth := bind.NewKeyedTransactor(key)
+	alloc := make(core.GenesisAlloc)
+	alloc[auth.From] = core.GenesisAccount{Balance: big.NewInt(1000000000)}
+	sim := backends.NewSimulatedBackend(alloc, 9999999999999999)
+	gasPrice, err :=sim.SuggestGasPrice(nil)
+	auth.GasPrice = gasPrice
+
+
+	address, tx1, _, err := DeployStorage(auth, sim)
+	if err != nil {
+		log.Fatalf("Failed to deploy new storage contract: %v", err)
+	}
+	fmt.Printf("Contract pending deploy: 0x%x\n", address)
+	fmt.Printf("Transaction waiting to be mined: 0x%x\n\n", tx1.Hash())
+
+	time.Sleep(250 * time.Millisecond) // Allow it to be processed by the local node :P
+
+	// instantiate contract
+	store, err := NewStorage(address, sim)
+	if err != nil {
+		log.Fatalf("Failed to instantiate a Storage contract: %v", err)
+	}
+	
+	// Call the store() function
+	tx2, err := store.Set(auth, big.NewInt(1000))
+	if err != nil {
+		log.Fatalf("Failed to update value: %v", err)
+	}
+	fmt.Printf("Update pending: 0x%x\n", tx2.Hash())
+
+	value, err := store.Retrieve(nil)
+	if err != nil {
+	log.Fatalf("Failed to retrieve value: %v", err)
+	}
+	fmt.Println("Value: ", value)
+}
+
 
 func main() {
 	fmt.Println("start in main .....")
-	deployContract()
+	//deployContract()
 	//callRetrieve()
-
-
+	//sendTransaction()
+	mockTest() // need to fix bug: always complaining "Failed to deploy new storage contract: transaction type not supported"
 }
+	
